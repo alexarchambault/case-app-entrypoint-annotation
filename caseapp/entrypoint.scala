@@ -1,4 +1,4 @@
-//> using lib "com.github.alexarchambault::case-app:2.1.0-M21+9-d8831905-SNAPSHOT"
+//> using lib "com.github.alexarchambault::case-app:2.1.0-M22"
 //> using lib "com.lihaoyi::pprint:0.8.1"
 //> using scala "3.3.0-RC1-bin-20230120-d6cc101-NIGHTLY"
 //> using option "-deprecation"
