@@ -4,7 +4,7 @@
 //> using option "-deprecation"
 
 //> using publish.organization "com.github.alexarchambault"
-//> using publish.name "case-app-macros"
+//> using publish.name "case-app-entrypoint-annotation"
 //> using publish.version "0.1.0-SNAPSHOT"
 
 // https://contributors.scala-lang.org/t/scala-3-macro-annotations-and-code-generation/6035
