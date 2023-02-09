@@ -8,7 +8,6 @@
 
 //> using publish.organization "com.github.alexarchambault"
 //> using publish.name "case-app-entrypoint-annotation"
-//> using publish.version "0.1.0-SNAPSHOT"
 
 // https://contributors.scala-lang.org/t/scala-3-macro-annotations-and-code-generation/6035
 // https://github.com/lampepfl/dotty/pull/16392
