@@ -1,7 +1,10 @@
-//> using lib "com.github.alexarchambault::case-app:2.1.0-M22"
-//> using lib "com.lihaoyi::pprint:0.8.1"
+//> using lib "com.github.alexarchambault::case-app::2.1.0-M23"
+//> using lib "com.lihaoyi::pprint::0.8.1"
+//> using lib "org.scala-lang::scala3-compiler:3.3.0-RC1-bin-20230120-d6cc101-NIGHTLY" // FIXME compile-time only
 //> using scala "3.3.0-RC1-bin-20230120-d6cc101-NIGHTLY"
 //> using option "-deprecation"
+
+//> using platform "jvm", "js" // TODO Add "native" when using a stable Scala version
 
 //> using publish.organization "com.github.alexarchambault"
 //> using publish.name "case-app-entrypoint-annotation"
@@ -19,6 +22,9 @@ import caseapp.core.app.CaseApp
 import caseapp.core.argparser.ArgParser
 import caseapp.core.help.Help
 import caseapp.core.parser.Parser
+import caseapp.core.util.Formatter
+import caseapp.core.util.NameOps.toNameOps
+import caseapp.internals.*
 
 import scala.annotation.*
 import scala.quoted.*
@@ -50,9 +56,22 @@ class entrypoint extends MacroAnnotation {
           if (lastIsVarArgs) params.init
           else params
 
+        def helpMessageOpt(param: ValDef): Option[String] =
+          param.symbol.annotations
+            .find(_.tpe =:= TypeRepr.of[caseapp.HelpMessage])
+            .collect {
+              case Apply(_, List(Literal(StringConstant(arg)), _)) =>
+                arg
+            }
+
         val parserExpr = actualParams.zipWithIndex.foldRight('{ Parser.nil: Parser[Tuple] }) {
           (elem, acc) =>
             val (param, idx) = elem
+            val helpMessageOpt0 = helpMessageOpt(param)
+            val helpMessageExpr: Expr[Option[String]] = helpMessageOpt0 match {
+              case Some(helpMessage) => '{ Some(${Expr(helpMessage)}) }
+              case None              => '{ None }
+            }
             param.tpt.tpe.asType match {
               case '[t] =>
                 val argParser = Expr.summon[ArgParser[t]].getOrElse {
@@ -67,10 +86,18 @@ class entrypoint extends MacroAnnotation {
                 }
 
                 '{
-                  entrypoint.add[t, Tuple]($acc, ${ Expr(param.name) }, $default)(using $argParser)
+                  entrypoint.add[t, Tuple]($acc, ${ Expr(param.name) }, $default, $helpMessageExpr)(using $argParser)
                 }
             }
         }
+
+        val detailsString = actualParams
+          .map { param =>
+            val helpMessageOpt0 = helpMessageOpt(param)
+            val formattedOption = caseapp.Name(param.name).option(Formatter.DefaultNameFormatter)
+            s"$formattedOption|${helpMessageOpt0.getOrElse("")}\n"
+          }
+          .mkString
 
         def userEntrypoint(args: Expr[Tuple], remaining: Expr[Seq[String]]): Expr[Unit] = {
           val f = Select.unique(This(tree.symbol.owner), name)
@@ -102,9 +129,28 @@ class entrypoint extends MacroAnnotation {
               _ => List(TypeRepr.of[Array[String]]),
               _ => TypeRepr.of[Unit]
             ),
-            Flags.Static,
+            Flags.JavaStatic,
             Symbol.noSymbol
           )
+
+          import dotty.tools.dotc.ast.Trees
+          import dotty.tools.dotc.core.Annotations
+          import dotty.tools.dotc.core.Contexts
+          import dotty.tools.dotc.core.Symbols
+
+          // mangling with dotty internal classes in order to annotate the main method
+          // don't know if there's a way to achieve that with the scala.quoted API
+          given ctx: Contexts.Context = quotes.asInstanceOf[scala.quoted.runtime.impl.QuotesImpl].ctx
+          val mainSymbolImpl = mainSymbol.asInstanceOf[Symbols.Symbol]
+          val detailsAnnotation = {
+            val annTree = Apply(
+              Select.unique(New(TypeTree.of[Details]), "<init>"),
+              List(Literal(StringConstant(detailsString)))
+            )
+            Annotations.ConcreteAnnotation(annTree.asInstanceOf[Trees.Apply[Trees.Untyped]])
+          }
+          mainSymbolImpl.denot.annotations = detailsAnnotation :: mainSymbolImpl.denot.annotations
+
           List(mainSymbol)
         }
 
@@ -146,22 +192,22 @@ object entrypoint {
   def add[H: ArgParser, T <: Tuple](
     parser: Parser[T],
     name: String,
-    default: () => Option[H]
+    default: () => Option[H],
+    help: Option[String]
   ): Parser[H *: T] =
-    parser.add[H](name, default())
+    parser.add[H](
+      name,
+      default(),
+      helpMessage = help.map(HelpMessage(_))
+    )
   def help[T](parser: Parser[T]) = Help[T](args = parser.args)
   def proceed(
     parser: Parser[Tuple],
     call: (Tuple, Seq[String]) => Unit,
     args: Seq[String]
   ): Unit = {
-    // scala.scalajs.js.Dynamic.global.require("process").env.selectDynamic("PATH")
-    val printArgs = sys.env.get("CASEAPP_METHOD_PRINT_ARGS").contains("true")
-    if (printArgs)
-      ???
-    else {
-      val t = CaseApp.process[Tuple](args)(using parser, help(parser))
-      call(t._1, t._2.all)
-    }
+    val actualArgs = Argv.get().getOrElse(args.toSeq)
+    val t = CaseApp.process[Tuple](actualArgs)(using parser, help(parser))
+    call(t._1, t._2.all)
   }
 }
