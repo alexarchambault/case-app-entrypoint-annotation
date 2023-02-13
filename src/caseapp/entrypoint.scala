@@ -1,7 +1,7 @@
 //> using lib "com.github.alexarchambault::case-app::2.1.0-M23"
 //> using lib "com.lihaoyi::pprint::0.8.1"
-//> using lib "org.scala-lang::scala3-compiler:3.3.0-RC1-bin-20230120-d6cc101-NIGHTLY" // FIXME compile-time only
-//> using scala "3.3.0-RC1-bin-20230120-d6cc101-NIGHTLY"
+//> using lib "org.scala-lang::scala3-compiler:3.3.0-RC2" // FIXME compile-time only
+//> using scala "3.3.0-RC2"
 //> using option "-deprecation"
 
 //> using platform "jvm", "js" // TODO Add "native" when using a stable Scala version
